@@ -1,13 +1,13 @@
 -- MySQL dump 10.13  Distrib 8.0.44, for Win64 (x86_64)
 --
--- Host: 127.0.0.1    Database: unibitedb
+-- Host: localhost    Database: unibitedb
 -- ------------------------------------------------------
 -- Server version	8.0.44
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!50503 SET NAMES utf8 */;
+/*!50503 SET NAMES utf8mb4 */;
 /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
 /*!40103 SET TIME_ZONE='+00:00' */;
 /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
@@ -34,13 +34,13 @@ CREATE TABLE `ads` (
   `all_portions` int NOT NULL,
   `available_portions` int NOT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `g_platos` decimal(10,0) DEFAULT NULL,
-  `g_mikos` decimal(10,0) DEFAULT NULL,
+  `g_platos` decimal(10,8) DEFAULT NULL,
+  `g_mikos` decimal(10,8) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `cook_id` (`cook_id`),
   CONSTRAINT `ads_ibfk_1` FOREIGN KEY (`cook_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `ads_chk_1` CHECK ((`available_portions` >= 0))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -49,6 +49,7 @@ CREATE TABLE `ads` (
 
 LOCK TABLES `ads` WRITE;
 /*!40000 ALTER TABLE `ads` DISABLE KEYS */;
+INSERT INTO `ads` VALUES (2,2,'Παστίτσιο ',NULL,'Δίνω έξτρα κομμάτια με πληρωμή σε είδος','','Δωμάτιο 15','14:00-15:00',5,1,'2026-04-27 20:33:19',NULL,NULL),(3,2,'Σνίτσελ',NULL,'γαμάει','','Πλατεία Μπεγουλακίου ','14:00-15:00',7,6,'2026-04-27 22:57:05',38.21290238,21.75313354);
 /*!40000 ALTER TABLE `ads` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -66,13 +67,14 @@ CREATE TABLE `requests` (
   `request_status` enum('pending','accepted','rejected','completed','not_show') DEFAULT 'pending',
   `review_rating` int DEFAULT NULL,
   `review_text` text,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `ad_id` (`ad_id`),
   KEY `consumer_id` (`consumer_id`),
   CONSTRAINT `requests_ibfk_1` FOREIGN KEY (`ad_id`) REFERENCES `ads` (`id`) ON DELETE CASCADE,
   CONSTRAINT `requests_ibfk_2` FOREIGN KEY (`consumer_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `requests_chk_1` CHECK ((`review_rating` between 1 and 5))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -81,6 +83,7 @@ CREATE TABLE `requests` (
 
 LOCK TABLES `requests` WRITE;
 /*!40000 ALTER TABLE `requests` DISABLE KEYS */;
+INSERT INTO `requests` VALUES (1,2,1,'completed',NULL,NULL,'2026-04-28 08:41:00'),(2,2,3,'completed',4,'φοβερό φαγητό','2026-04-28 08:41:00'),(3,3,3,'completed',NULL,NULL,'2026-04-28 08:41:00');
 /*!40000 ALTER TABLE `requests` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -99,7 +102,7 @@ CREATE TABLE `users` (
   `points` int DEFAULT '5',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -108,7 +111,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` VALUES (1,'panos','1234','admin',5,'2026-04-26 17:09:40'),(2,'panos_user','12345','student',5,'2026-04-26 17:27:49');
+INSERT INTO `users` VALUES (1,'admin','admin','admin',5,'2026-04-26 17:09:40'),(2,'panos','panos','student',6,'2026-04-26 17:27:49'),(3,'alex','alex','student',5,'2026-04-27 22:01:26'),(4,'nick','nick','student',5,'2026-04-28 08:26:44');
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -121,4 +124,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-27  8:12:22
+-- Dump completed on 2026-04-28 12:57:21

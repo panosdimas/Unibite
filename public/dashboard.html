@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniBite - Dashboard Μάγειρα</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: #0056b3; color: white; padding: 10px 20px; border-radius: 8px; margin-bottom: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input, .form-group textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { padding: 10px 15px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #218838; }
+        #logout-btn { background-color: #dc3545; }
+        #logout-btn:hover { background-color: #c82333; }
+        .message { margin-bottom: 15px; font-weight: bold; }
+        .nav-links a { color: white; margin-left: 15px; text-decoration: none; font-weight: bold;white-space: nowrap; }
+        .nav-links a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="nav-links">
+        <span style="font-size: 1.5em; margin-right: 10px; font-weight: bold;">UniBite Dashboard</span>
+        <a href="feed.html">Feed Αγγελιών</a>
+        <a href="my-requests.html">Το Ιστορικό μου</a>
+    </div>
+    <div>
+        <span id="user-info"></span> | 
+        <button id="logout-btn" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-left: 5px;">Αποσύνδεση</button>
+    </div>
+</div>
+
+<div class="container">
+    <h3>Ανέβασε νέα μερίδα</h3>
+    <div id="ad-message" class="message"></div>
+    
+    <form id="create-ad-form">
+        <div class="form-group">
+            <label for="title">Τίτλος Φαγητού *</label>
+            <input type="text" id="title" required placeholder="π.χ. Παστίτσιο της μαμάς">
+        </div>
+        <div class="form-group">
+            <label for="portions">Αριθμός Μερίδων *</label>
+            <input type="number" id="portions" required min="1" placeholder="Πόσες μερίδες δίνεις;">
+        </div>
+        <div class="form-group">
+            <label for="location">Σημείο Παραλαβής *</label>
+            <input type="text" id="location" required placeholder="π.χ. Εστία Α, Δωμάτιο 102">
+        </div>
+        <div class="form-group">
+            <label>Επιλέξτε ακριβές σημείο στον χάρτη *</label>
+            <div id="map" style="height: 300px; border-radius: 4px; border: 1px solid #ccc; z-index: 1;"></div>
+            <small style="color: #666;">Κάντε κλικ στον χάρτη για να βάλετε την πινέζα.</small>
+        </div>
+        <div class="form-group">
+            <label for="time">Ώρα Παραλαβής *</label>
+            <input type="text" id="time" required placeholder="π.χ. 14:00 - 15:00">
+        </div>
+        <div class="form-group">
+            <label for="allergies">Αλλεργιογόνα</label>
+            <input type="text" id="allergies" placeholder="π.χ. Γάλα, Αυγά, Γλουτένη">
+        </div>
+        <div class="form-group">
+            <label for="notes">Σημειώσεις</label>
+            <textarea id="notes" rows="3" placeholder="Έξτρα πληροφορίες..."></textarea>
+        </div>
+        <button type="submit">Δημιουργία Αγγελίας</button>
+    </form>
+</div>
+
+<div class="container" style="margin-top: 20px;">
+    <h3>Οι Ενεργές μου Αγγελίες</h3>
+    <div id="my-ads-list"></div>
+</div>
+
+<div class="container" style="margin-top: 20px; margin-bottom: 40px;">
+    <h3>Εισερχόμενα Αιτήματα</h3>
+    <div id="requests-list">
+        </div>
+</div>
+
+<script src="dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniBite - Feed Αγγελιών</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: #28a745; color: white; padding: 10px 20px; border-radius: 8px; margin-bottom: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .ad-card { border: 1px solid #ccc; padding: 15px; margin: 15px 0; border-radius: 8px; background-color: #f9f9f9; display: flex; justify-content: space-between; align-items: center; }
+        .ad-card.inactive { background-color: #e9ecef; color: #6c757d; border-color: #dee2e6; } 
+        .request-btn { background-color: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .request-btn:hover { background-color: #0056b3; }
+        .request-btn:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .nav-links a { color: white; margin-right: 15px; text-decoration: none; font-weight: bold;white-space: nowrap; }
+        .nav-links a:hover { text-decoration: underline; }
+        /* Στυλ για τον χάρτη του Feed */
+        #feed-map { height: 400px; width: 100%; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 20px; z-index: 1; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="nav-links">
+        <span style="font-size: 1.5em; margin-right: 20px;">UniBite Feed</span>
+        <a href="dashboard.html">Το Dashboard μου</a>
+        <a href="my-requests.html">Το Ιστορικό μου</a>
+    </div>
+    <div>
+        <span id="user-info"></span> | 
+        <button id="logout-btn" style="background: #dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Αποσύνδεση</button>
+    </div>
+</div>
+
+<div class="container">
+    <h2>Διαθέσιμο Φαγητό Σήμερα</h2>
+    <p>Δες τον χάρτη ή τη λίστα παρακάτω και ζήτησε μια μερίδα!</p>
+    
+    <div id="feed-map"></div>
+
+    <div id="feed-list"></div>
+</div>
+
+<script src="feed.js"></script>
+</body>
+</html>

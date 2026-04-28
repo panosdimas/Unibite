@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniBite - Admin Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #343a40; color: white; margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: #212529; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .stat-box { background: #495057; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
+        .stat-box h2 { margin: 0 0 10px 0; color: #ffc107; font-size: 2.5em; }
+        .stat-box p { margin: 0; font-size: 1.2em; }
+        table { width: 100%; border-collapse: collapse; background: #495057; border-radius: 8px; overflow: hidden; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #6c757d; }
+        th { background: #212529; color: #ffc107; }
+        button { padding: 8px 15px; background-color: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2>Πίνακας Ελέγχου Διαχειριστή</h2>
+    <div>
+        <span id="admin-name"></span> | 
+        <button id="logout-btn">Αποσύνδεση</button>
+    </div>
+</div>
+
+<div class="container">
+    <div style="display: flex; gap: 20px;">
+        <div class="stat-box" style="flex: 1;">
+            <p>Μερίδες που διαμοιράστηκαν τον τελευταίο μήνα</p>
+            <h2 id="total-portions">-</h2>
+        </div>
+
+        <div class="stat-box" style="flex: 1;">
+            <p>Top Donor (Καλύτερος Μάγειρας)</p>
+            <h2 id="top-donor-name">-</h2>
+            <p id="top-donor-count" style="font-size: 1em; color: #adb5bd;">-</p>
+        </div>
+    </div>
+
+    <h3 style="color: #ffc107;">Τα γεύματα με την υψηλότερη αξιολόγηση</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Φαγητό</th>
+                <th>Μάγειρας</th>
+                <th>Μέση Βαθμολογία</th>
+            </tr>
+        </thead>
+        <tbody id="top-meals-list">
+            </tbody>
+    </table>
+</div>
+
+<script src="admin.js"></script>
+</body>
+</html>
