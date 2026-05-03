@@ -22,6 +22,21 @@ document.addEventListener('DOMContentLoaded', () => {
             navLinks.appendChild(adminBtn);
         }
     }
+    // ΣΥΝΑΡΤΗΣΗ ΠΟΥ ΑΝΑΝΕΩΝΕΙ ΤΟΥΣ ΠΟΝΤΟΥΣ ΣΤΗΝ ΟΘΟΝΗ ΖΩΝΤΑΝΑ
+    function updatePointsUI() {
+        fetch(`/api/users/${user.id}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.points !== undefined) {
+                    user.points = data.points;
+                    localStorage.setItem('user', JSON.stringify(user)); 
+                    document.getElementById('user-info').textContent = `Γεια σου, ${user.username} (Πόντοι: ${user.points})`;
+                }
+            }).catch(err => console.error('Σφάλμα ανανέωσης πόντων:', err));
+    }
+
+    // Καλούμε τη συνάρτηση 1 φορά όταν μπαίνει στη σελίδα
+    updatePointsUI();
     document.getElementById('user-info').textContent = `Γεια σου, ${user.username} (Πόντοι: ${user.points})`;
     document.getElementById('logout-btn').addEventListener('click', () => {
         localStorage.removeItem('user');
@@ -39,108 +54,215 @@ document.addEventListener('DOMContentLoaded', () => {
     // Φτιάχνουμε ένα γκρουπ για τις πινέζες για να μπορούμε να τις καθαρίζουμε εύκολα
     const markersGroup = L.layerGroup().addTo(map);
 
-    // 2. Φόρτωση του Feed
+    // --- ΛΟΓΙΚΗ ΦΙΛΤΡΟΥ ΚΑΙ ΑΠΟΣΤΑΣΗΣ ---
+    let allAds = []; // Εδώ θα κρατάμε όλες τις αγγελίες της βάσης
+    let userLat = null;
+    let userLng = null;
+    let userMarker = null;
+    let isFilterActive = false;
+
+    // Εμφάνιση/Απόκρυψη του Πάνελ
+    document.getElementById('toggle-filter-btn').addEventListener('click', () => {
+        const panel = document.getElementById('filter-panel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    });
+
+    // Όταν ο χρήστης κάνει κλικ στον χάρτη (για να βάλει τη θέση του)
+    map.on('click', function(e) {
+        if (document.getElementById('filter-panel').style.display === 'block') {
+            userLat = e.latlng.lat;
+            userLng = e.latlng.lng;
+            
+            if (userMarker) {
+                userMarker.setLatLng(e.latlng);
+            } else {
+                // Φτιάχνουμε μια κόκκινη πινέζα για τον χρήστη
+                const redIcon = L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+                });
+                userMarker = L.marker(e.latlng, {icon: redIcon}).addTo(map);
+                userMarker.bindPopup("<b>Η τοποθεσία σου!</b>").openPopup();
+            }
+        }
+    });
+
+    // Μαθηματικός Τύπος Haversine (Υπολογίζει απόσταση μεταξύ 2 συντεταγμένων σε χλμ)
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371; // Ακτίνα της Γης
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+
+    // Κουμπί "Εφαρμογή"
+    document.getElementById('apply-filter-btn').addEventListener('click', () => {
+        if (!userLat || !userLng) {
+            alert('Παρακαλώ κάνε κλικ στον χάρτη για να επιλέξεις την τοποθεσία σου (κόκκινη πινέζα)!');
+            return;
+        }
+
+        const maxDist = parseFloat(document.getElementById('filter-distance').value);
+        const limit = parseInt(document.getElementById('filter-limit').value, 10);
+
+        // 1. Υπολογισμός απόστασης για κάθε αγγελία
+        let filteredAds = allAds.map(ad => {
+            ad.distance = (ad.g_platos && ad.g_mikos) ? calculateDistance(userLat, userLng, ad.g_platos, ad.g_mikos) : Infinity;
+            return ad;
+        });
+
+        // 2. Φιλτράρισμα βάσει χιλιομέτρων (κρατάμε όσα είναι <= maxDist)
+        filteredAds = filteredAds.filter(ad => ad.distance <= maxDist);
+
+        // 3. Ταξινόμηση (Πρώτα τα διαθέσιμα βάσει απόστασης, μετά τα εξαντλημένα)
+        filteredAds.sort((a, b) => {
+            const aSoldOut = a.available_portions === 0 ? 1 : 0;
+            const bSoldOut = b.available_portions === 0 ? 1 : 0;
+            
+            if (aSoldOut !== bSoldOut) {
+                return aSoldOut - bSoldOut; // Το εξαντλημένο πάει κάτω
+            }
+            return a.distance - b.distance; // Αν είναι και τα 2 διαθέσιμα (ή και τα 2 εξαντλημένα), ταξινόμησε βάσει απόστασης
+        });
+
+        // 4. Περιορισμός αποτελεσμάτων (LIMIT)
+        if (filteredAds.length > limit) filteredAds = filteredAds.slice(0, limit);
+
+        isFilterActive = true;
+        renderAds(filteredAds); // Ζωγραφίζουμε τα φιλτραρισμένα
+    });
+
+    // Κουμπί "Καθαρισμός"
+    document.getElementById('clear-filter-btn').addEventListener('click', () => {
+        isFilterActive = false;
+        if (userMarker) { map.removeLayer(userMarker); userMarker = null; }
+        userLat = null; userLng = null;
+        renderAds(allAds); // Ζωγραφίζουμε ξανά όλες τις αγγελίες
+    });
+
+
+    // --- ΦΟΡΤΩΣΗ ΚΑΙ ΖΩΓΡΑΦΙΚΗ ΤΩΝ ΑΓΓΕΛΙΩΝ ---
+    
+    // Τραβάει τις αγγελίες από τον Server
     async function loadFeed() {
         try {
             const response = await fetch('/api/feed');
-            const ads = await response.json();
+            let fetchedAds = await response.json();
             
-            feedList.innerHTML = '';
-            markersGroup.clearLayers(); // Καθαρίζει τις παλιές πινέζες από τον χάρτη
-
-            if (ads.length === 0) {
-                feedList.innerHTML = '<p>Δεν υπάρχει διαθέσιμο φαγητό αυτή τη στιγμή.</p>';
-                return;
+            // --- ΠΡΟΣΘΗΚΗ: Σπρώχνουμε τα "Εξαντλημένα" στο τέλος ---
+            fetchedAds.sort((a, b) => {
+                const aSoldOut = a.available_portions === 0 ? 1 : 0;
+                const bSoldOut = b.available_portions === 0 ? 1 : 0;
+                return aSoldOut - bSoldOut; 
+            });
+            // --------------------------------------------------------
+            
+            allAds = fetchedAds; // Αποθηκεύουμε τα ταξινομημένα δεδομένα
+            
+            // Αν το φίλτρο είναι ήδη ανοιχτό, το ξανατρέχουμε για να ανανεωθούν τα δεδομένα
+            if (isFilterActive) {
+                document.getElementById('apply-filter-btn').click();
+            } else {
+                renderAds(allAds);
             }
-
-            ads.forEach(ad => {
-                const isSoldOut = ad.available_portions === 0;
-                const isMine = ad.cook_id === user.id;
-
-                // --- ΛΟΓΙΚΗ ΓΙΑ ΤΟΝ ΧΑΡΤΗ ---
-                // Αν έχει συντεταγμένες και δεν έχει εξαντληθεί, βάζουμε πινέζα!
-                if (ad.g_platos && ad.g_mikos && !isSoldOut) {
-                    const marker = L.marker([ad.g_platos, ad.g_mikos]);
-                    
-                    // Τι θα γράφει το συννεφάκι (Popup) όταν το πατάς
-                    marker.bindPopup(`
-                        <strong style="color: #0056b3; font-size: 1.1em;">${ad.title}</strong><br>
-                        <em>από ${ad.cook_name}</em><br>
-                        Μερίδες: ${ad.available_portions}<br>
-                        <a href="#ad-card-${ad.id}" style="color: green; text-decoration: none; font-weight: bold;">Δες το στη λίστα!</a>
-                    `);
-                    markersGroup.addLayer(marker);
-                }
-                // -----------------------------
-
-                // --- ΛΟΓΙΚΗ ΓΙΑ ΤΗ ΛΙΣΤΑ ---
-                const card = document.createElement('div');
-                card.className = 'ad-card';
-                card.id = `ad-card-${ad.id}`; // Το id για να κάνει scroll εκεί αν το πατήσεις από τον χάρτη
-                
-                if (isSoldOut) card.classList.add('inactive');
-
-                let buttonHTML = '';
-                if (isMine) {
-                    buttonHTML = `<button class="request-btn" disabled>Δική σου Αγγελία</button>`;
-                } else if (isSoldOut) {
-                    buttonHTML = `<button class="request-btn" disabled>Εξαντλήθηκε</button>`;
-                } else {
-                    buttonHTML = `<button class="request-btn ask-btn" data-id="${ad.id}">Θέλω μια μερίδα!</button>`;
-                }
-
-                card.innerHTML = `
-                    <div style="flex-grow: 1;">
-                        <h3 style="margin: 0 0 5px 0; color: ${isSoldOut ? '#6c757d' : '#0056b3'};">${ad.title}</h3>
-                        <p style="margin: 5px 0;"><strong>Μάγειρας:</strong> ${ad.cook_name}</p>
-                        <p style="margin: 5px 0;"><strong>Μερίδες:</strong> ${ad.available_portions} / ${ad.all_portions}</p>
-                        <p style="margin: 5px 0; font-size: 0.9em;"><strong>Παραλαβή:</strong> ${ad.pickup_location} | <strong>Ώρα:</strong> ${ad.pickup_time}</p>
-                        <p style="margin: 5px 0; font-size: 0.8em; color: #555;"><strong>Αλλεργιογόνα:</strong> ${ad.allergies || 'Κανένα'}</p>
-                        <p style="margin: 5px 0; font-size: 0.9em;"><strong>Σημειώσεις:</strong> ${ad.notes || '-'}</p>
-                    </div>
-                    <div>
-                        ${buttonHTML}
-                    </div>
-                `;
-                
-                feedList.appendChild(card);
-            });
-
-            // Ενεργοποίηση των κουμπιών αιτήματος
-            const requestButtons = document.querySelectorAll('.ask-btn');
-            requestButtons.forEach(btn => {
-                btn.addEventListener('click', async (e) => {
-                    const adId = e.target.getAttribute('data-id');
-                    
-                    if (!confirm('Θέλετε να δεσμεύσετε μια μερίδα; Θα χρησιμοποιηθεί 1 πόντος σας.')) return;
-
-                    try {
-                        const reqResponse = await fetch('/api/requests', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ ad_id: adId, consumer_id: user.id })
-                        });
-
-                        const reqResult = await reqResponse.json();
-
-                        if (reqResponse.ok) {
-                            alert(reqResult.message); 
-                            loadFeed(); // Ανανεώνουμε για να ενημερωθούν τα νούμερα
-                        } else {
-                            alert('Σφάλμα: ' + reqResult.message);
-                        }
-                    } catch (err) {
-                        console.error('Σφάλμα δικτύου:', err);
-                        alert('Προέκυψε σφάλμα δικτύου.');
-                    }
-                });
-            });
-
         } catch (error) {
-            console.error('Σφάλμα φόρτωσης:', error);
             feedList.innerHTML = '<p style="color: red;">Σφάλμα κατά τη φόρτωση του feed.</p>';
         }
     }
 
+    // Ζωγραφίζει τις κάρτες και τις πινέζες στην οθόνη
+    function renderAds(adsToRender) {
+        feedList.innerHTML = '';
+        markersGroup.clearLayers();
+
+        if (adsToRender.length === 0) {
+            feedList.innerHTML = '<p>Δεν βρέθηκαν αποτελέσματα με αυτά τα κριτήρια.</p>';
+            return;
+        }
+
+        adsToRender.forEach(ad => {
+            const isSoldOut = ad.available_portions === 0;
+            const isMine = ad.cook_id === user.id;
+
+            // ΧΑΡΤΗΣ: Προσθήκη πινέζας
+            if (ad.g_platos && ad.g_mikos && !isSoldOut) {
+                const marker = L.marker([ad.g_platos, ad.g_mikos]);
+                marker.bindPopup(`
+                    <strong style="color: #0056b3;">${ad.title}</strong><br>
+                    Μερίδες: ${ad.available_portions}<br>
+                    <a href="#ad-card-${ad.id}" style="color: green; font-weight: bold;">Δες το στη λίστα!</a>
+                `);
+                markersGroup.addLayer(marker);
+            }
+
+            // Εμφάνιση της Απόστασης στον τίτλο (Αν το φίλτρο είναι ενεργό)
+            let distanceHtml = '';
+            if (isFilterActive && ad.distance !== Infinity) {
+                distanceHtml = `<span style="color: #d63384; font-size: 0.8em; margin-left: 10px;">(Απέχει ${ad.distance.toFixed(1)} χλμ)</span>`;
+            }
+
+            // ΛΙΣΤΑ: Δημιουργία Κάρτας
+            const card = document.createElement('div');
+            card.className = 'ad-card';
+            card.id = `ad-card-${ad.id}`;
+            card.style.display = 'block'; // ΠΡΟΣΘΗΚΗ: Ακυρώνει την οριζόντια διάταξη της κάρτας!
+            if (isSoldOut) card.classList.add('inactive');
+
+            let buttonHTML = isMine ? `<button class="request-btn" disabled>Δική σου</button>` :
+                             isSoldOut ? `<button class="request-btn" disabled>Εξαντλήθηκε</button>` :
+                             `<button class="request-btn ask-btn" data-id="${ad.id}">Θέλω μια μερίδα!</button>`;
+
+            // Εικόνα που απλώνεται σε όλο το πλάτος (αν υπάρχει)
+            let imageHTML = ad.image 
+                ? `<img src="${ad.image}" alt="Φωτογραφία φαγητού" style="width: 100%; height: 220px; object-fit: cover; border-radius: 8px; margin-bottom: 15px; display: block;">` 
+                : '';
+
+            // Νέα Δομή: Η εικόνα πάνω, και από κάτω κείμενο και κουμπί δίπλα-δίπλα
+            card.innerHTML = `
+                ${imageHTML}
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="flex-grow: 1; padding-right: 15px;">
+                        <h3 style="margin: 0 0 5px 0; color: ${isSoldOut ? '#6c757d' : '#0056b3'};">${ad.title} ${distanceHtml}</h3>
+                        <p style="margin: 5px 0;"><strong>Μάγειρας:</strong> ${ad.cook_name} | <strong>Μερίδες:</strong> ${ad.available_portions}/${ad.all_portions}</p>
+                        <p style="margin: 5px 0; font-size: 0.9em;"><strong>Παραλαβή:</strong> ${ad.pickup_location} | <strong>Ώρα:</strong> ${ad.pickup_time}</p>
+                    </div>
+                    <div>${buttonHTML}</div>
+                </div>
+            `;
+            feedList.appendChild(card);
+        });
+
+        // Σύνδεση των νέων κουμπιών "Θέλω μια μερίδα"
+        document.querySelectorAll('.ask-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const adId = e.target.getAttribute('data-id');
+                if (!confirm('Θέλετε να δεσμεύσετε μια μερίδα; (Κοστίζει 1 πόντο)')) return;
+
+                try {
+                    const reqResponse = await fetch('/api/requests', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ad_id: adId, consumer_id: user.id })
+                    });
+                    const reqResult = await reqResponse.json();
+
+                    if (reqResponse.ok) {
+                        alert(reqResult.message);
+                        loadFeed();
+                        updatePointsUI();
+                    } else {
+                        alert('Σφάλμα: ' + reqResult.message);
+                    }
+                } catch (err) { console.error(err); }
+            });
+        });
+    }
+
+    // Φόρτωση με το άνοιγμα της σελίδας
     loadFeed();
 });

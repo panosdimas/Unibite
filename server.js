@@ -4,7 +4,8 @@ const cors = require('cors');
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); 
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static('public'));
 
 const dbConfig = {
@@ -48,9 +49,9 @@ app.post('/api/register', async (req, res) => {
 
 const PORT = 3000;
 
-// ΔΗΜΙΟΥΡΓΙΑ ΑΓΓΕΛΙΑΣ (CREATE AD) - Με Χάρτη
+// ΔΗΜΙΟΥΡΓΙΑ ΑΓΓΕΛΙΑΣ
 app.post('/api/ads', async (req, res) => {
-    const { cook_id, title, notes, allergies, pickup_location, pickup_time, all_portions, g_platos, g_mikos } = req.body;
+    const { cook_id, title, notes, allergies, pickup_location, pickup_time, all_portions, g_platos, g_mikos, image } = req.body;
 
     if (!title || !pickup_location || !pickup_time || !all_portions || !g_platos || !g_mikos) {
         return res.status(400).json({ message: 'Συμπληρώστε τα υποχρεωτικά πεδία και επιλέξτε σημείο στον χάρτη.' });
@@ -58,19 +59,19 @@ app.post('/api/ads', async (req, res) => {
 
     try {
         const query = `
-            INSERT INTO ads (cook_id, title, notes, allergies, pickup_location, pickup_time, all_portions, available_portions, g_platos, g_mikos) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO ads (cook_id, title, notes, allergies, pickup_location, pickup_time, all_portions, available_portions, g_platos, g_mikos, image) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
-        await db.execute(query, [cook_id, title, notes, allergies, pickup_location, pickup_time, all_portions, all_portions, g_platos, g_mikos]);
+        // Προσθέτουμε το image στο τέλος του πίνακα των παραμέτρων
+        await db.execute(query, [cook_id, title, notes, allergies, pickup_location, pickup_time, all_portions, all_portions, g_platos, g_mikos, image || null]);
         
         res.status(201).json({ message: 'Η αγγελία δημιουργήθηκε επιτυχώς!' });
     } catch (error) {
-        console.error('Σφάλμα δημιουργίας αγγελίας:', error);
-        res.status(500).json({ message: 'Προέκυψε σφάλμα κατά την αποθήκευση.' });
+        console.error('Σφάλμα:', error);
+        res.status(500).json({ message: 'Σφάλμα.' });
     }
 });
 
-// ΠΡΟΒΟΛΗ ΑΓΓΕΛΙΩΝ ΜΑΓΕΙΡΑ (READ)
 // ΠΡΟΒΟΛΗ ΑΓΓΕΛΙΩΝ ΜΑΓΕΙΡΑ (READ) - Μόνο όσες είναι < 48 ωρών
 app.get('/api/ads/:cook_id', async (req, res) => {
     const cookId = req.params.cook_id;
@@ -95,31 +96,48 @@ app.delete('/api/ads/:id', async (req, res) => {
     }
 });
 
-// ΕΠΕΞΕΡΓΑΣΙΑ ΑΓΓΕΛΙΑΣ (UPDATE) - Με Χάρτη
+// ΕΠΕΞΕΡΓΑΣΙΑ ΑΓΓΕΛΙΑΣ (UPDATE)
 app.put('/api/ads/:id', async (req, res) => {
     const adId = req.params.id;
-    const { title, all_portions, pickup_location, pickup_time, allergies, notes, g_platos, g_mikos } = req.body;
+    const { title, all_portions, pickup_location, pickup_time, allergies, notes, g_platos, g_mikos, image } = req.body;
 
     try {
+        // --- 1. Βρίσκουμε τις παλιές μερίδες για να κάνουμε τα μαθηματικά ---
+        const [oldAd] = await db.execute('SELECT all_portions, available_portions FROM ads WHERE id = ?', [adId]);
+        if (oldAd.length === 0) return res.status(404).json({ message: 'Δεν βρέθηκε η αγγελία' });
+        
+        const oldAll = oldAd[0].all_portions;
+        const oldAvail = oldAd[0].available_portions;
+        
+        // Υπολογίζουμε τις νέες διαθέσιμες μερίδες
+        const difference = parseInt(all_portions, 10) - oldAll;
+        let newAvail = oldAvail + difference;
+        
+        // Έξυπνοι έλεγχοι: Δεν γίνεται να έχουμε αρνητικές, ούτε περισσότερες από το σύνολο!
+        if (newAvail < 0) newAvail = 0; 
+        if (newAvail > parseInt(all_portions, 10)) newAvail = parseInt(all_portions, 10);
+
+        // --- 2. Ενημερώνουμε τη Βάση ---
         const query = `
             UPDATE ads 
-            SET title = ?, all_portions = ?, pickup_location = ?, pickup_time = ?, allergies = ?, notes = ?, g_platos = ?, g_mikos = ?
+            SET title = ?, all_portions = ?, available_portions = ?, pickup_location = ?, pickup_time = ?, allergies = ?, notes = ?, g_platos = ?, g_mikos = ?, image = ?
             WHERE id = ?
         `;
-        await db.execute(query, [title, all_portions, pickup_location, pickup_time, allergies, notes, g_platos, g_mikos, adId]);
+        await db.execute(query, [title, all_portions, newAvail, pickup_location, pickup_time, allergies, notes, g_platos, g_mikos, image || null, adId]);
         res.status(200).json({ message: 'Η αγγελία ενημερώθηκε επιτυχώς!' });
     } catch (error) {
         console.error('Σφάλμα επεξεργασίας αγγελίας:', error);
-        res.status(500).json({ message: 'Προέκυψε σφάλμα κατά την επεξεργασία.' });
+        res.status(500).json({ message: 'Προέκυψε σφάλμα.' });
     }
 });
 
-// ΛΗΨΗ ΑΙΤΗΜΑΤΩΝ ΓΙΑ ΤΟΝ ΜΑΓΕΙΡΑ (COOK REQUESTS)
+/// ΛΗΨΗ ΑΙΤΗΜΑΤΩΝ ΓΙΑ ΤΟΝ ΜΑΓΕΙΡΑ (COOK REQUESTS)
 app.get('/api/cook-requests/:cook_id', async (req, res) => {
     const cookId = req.params.cook_id;
     try {
         const query = `
-            SELECT r.id as request_id, r.request_status, u.username as consumer_name, a.title as ad_title, a.id as ad_id
+            SELECT r.id as request_id, r.request_status, r.review_rating, r.review_text, 
+                   u.username as consumer_name, a.title as ad_title, a.id as ad_id
             FROM requests r
             JOIN users u ON r.consumer_id = u.id
             JOIN ads a ON r.ad_id = a.id
@@ -140,11 +158,22 @@ app.put('/api/requests/:id/status', async (req, res) => {
     const { status, ad_id } = req.body; // status: 'accepted' ή 'rejected'
 
     try {
+        // 1. Ενημερώνουμε την κατάσταση του αιτήματος στη βάση
         await db.execute('UPDATE requests SET request_status = ? WHERE id = ?', [status, reqId]);
         
-        // Αν το αίτημα γίνει αποδεκτό, μειώνουμε τις διαθέσιμες μερίδες της αγγελίας κατά 1
+        // 2. Τι γίνεται ανάλογα με την απόφαση του μάγειρα:
         if (status === 'accepted') {
+            // Αν το δεχτεί, μειώνουμε τις διαθέσιμες μερίδες της αγγελίας κατά 1
             await db.execute('UPDATE ads SET available_portions = available_portions - 1 WHERE id = ? AND available_portions > 0', [ad_id]);
+        
+        } else if (status === 'rejected') {
+            // --- ΠΡΟΣΘΗΚΗ: ΕΠΙΣΤΡΟΦΗ ΠΟΝΤΟΥ ΣΤΟΝ ΚΑΤΑΝΑΛΩΤΗ ---
+            // Αν το απορρίψει, βρίσκουμε ποιος έκανε το αίτημα και του δίνουμε 1 πόντο πίσω!
+            const [rows] = await db.execute('SELECT consumer_id FROM requests WHERE id = ?', [reqId]);
+            if (rows.length > 0) {
+                const consumerId = rows[0].consumer_id;
+                await db.execute('UPDATE users SET points = points + 1 WHERE id = ?', [consumerId]);
+            }
         }
         
         res.status(200).json({ message: 'Η κατάσταση του αιτήματος ενημερώθηκε!' });
@@ -154,22 +183,35 @@ app.put('/api/requests/:id/status', async (req, res) => {
     }
 });
 
-// ΟΛΟΚΛΗΡΩΣΗ Ή ΑΚΥΡΩΣΗ ΣΥΝΑΝΤΗΣΗΣ (COMPLETED / NOT_SHOW)
+// ΟΛΟΚΛΗΡΩΣΗ Ή ΑΚΥΡΩΣΗ ΑΙΤΗΜΑΤΟΣ ΑΠΟ ΤΟΝ ΜΑΓΕΙΡΑ (ΠΑΡΕΛΗΦΘΗ / ΔΕΝ ΕΜΦΑΝΙΣΤΗΚΕ)
 app.put('/api/requests/:id/finalize', async (req, res) => {
     const reqId = req.params.id;
-    const { status, consumer_id } = req.body; // Μπορεί να είναι 'completed' ή 'not_show'
+    const { status } = req.body; // Πλέον παίρνουμε ΜΟΝΟ το status από το Front-End
 
     try {
+        // 1. Ενημερώνουμε την κατάσταση του αιτήματος στη βάση
         await db.execute('UPDATE requests SET request_status = ? WHERE id = ?', [status, reqId]);
-        
-        // Αν ο φοιτητής δεν εμφανίστηκε, του αφαιρούμε 1 πόντο
+
+        // 2. Αν ο καταναλωτής "έριξε πιστόλι" (Δεν Εμφανίστηκε)
         if (status === 'not_show') {
-            await db.execute('UPDATE users SET points = points - 1 WHERE id = ?', [consumer_id]);
+            // Βρίσκουμε τον καταναλωτή ΚΑΙ την αγγελία απευθείας από τη βάση δεδομένων (Απόλυτα Ασφαλές!)
+            const [reqInfo] = await db.execute('SELECT ad_id, consumer_id FROM requests WHERE id = ?', [reqId]);
+            
+            if (reqInfo.length > 0) {
+                const adId = reqInfo[0].ad_id;
+                const dbConsumerId = reqInfo[0].consumer_id; // Το ID του φοιτητή
+
+                // Α. Επιβάλλουμε την ποινή: του αφαιρούμε 1 πόντο
+                await db.execute('UPDATE users SET points = points - 1 WHERE id = ?', [dbConsumerId]);
+
+                // Β. Επιστροφή της μερίδας
+                await db.execute('UPDATE ads SET available_portions = available_portions + 1 WHERE id = ?', [adId]);
+            }
         }
-        
-        res.status(200).json({ message: 'Η συνάντηση ενημερώθηκε επιτυχώς!' });
+
+        res.status(200).json({ message: 'Η ενέργεια ολοκληρώθηκε με επιτυχία!' });
     } catch (error) {
-        console.error('Σφάλμα ολοκλήρωσης:', error);
+        console.error('Σφάλμα στο finalize αιτήματος:', error);
         res.status(500).json({ message: 'Προέκυψε σφάλμα.' });
     }
 });
@@ -195,18 +237,30 @@ app.get('/api/consumer-requests/:consumer_id', async (req, res) => {
     }
 });
 
-// ΥΠΟΒΟΛΗ ΑΞΙΟΛΟΓΗΣΗΣ ΚΑΙ ΑΠΟΔΟΣΗ ΠΟΝΤΩΝ
+// ΥΠΟΒΟΛΗ ΑΞΙΟΛΟΓΗΣΗΣ ΚΑΙ ΑΠΟΔΟΣΗ ΠΟΝΤΩΝ ΣΤΟΝ ΜΑΓΕΙΡΑ
 app.put('/api/requests/:id/review', async (req, res) => {
     const reqId = req.params.id;
     const { rating, text } = req.body;
+    
+    // ΜΕΤΑΤΡΟΠΗ ΣΕ ΑΡΙΘΜΟ ΓΙΑ ΝΑ ΜΗΝ ΜΠΕΡΔΕΥΕΤΑΙ Η JAVASCRIPT
+    const numericRating = parseInt(rating, 10); 
 
     try {
         // 1. Αποθηκεύουμε την αξιολόγηση
-        await db.execute('UPDATE requests SET review_rating = ?, review_text = ? WHERE id = ?', [rating, text, reqId]);
+        await db.execute('UPDATE requests SET review_rating = ?, review_text = ? WHERE id = ?', [numericRating, text, reqId]);
         
-        // 2. Αν η βαθμολογία είναι > 3, δίνουμε 1 πόντο στον Μάγειρα!
-        if (rating > 3) {
-            // Βρίσκουμε ποιος είναι ο μάγειρας αυτού του αιτήματος
+        // 2. Υπολογισμός πόντων ανταμοιβής
+        let bonusPoints = 0;
+        if (numericRating >= 1 && numericRating <= 3) {
+            bonusPoints = 1;
+        } else if (numericRating === 4) {
+            bonusPoints = 2;
+        } else if (numericRating === 5) {
+            bonusPoints = 3;
+        }
+        
+        // 3. Δίνουμε τους πόντους στον Μάγειρα
+        if (bonusPoints > 0) {
             const queryCook = `
                 SELECT a.cook_id 
                 FROM requests r 
@@ -216,8 +270,7 @@ app.put('/api/requests/:id/review', async (req, res) => {
             const [rows] = await db.execute(queryCook, [reqId]);
             if (rows.length > 0) {
                 const cookId = rows[0].cook_id;
-                // Δίνουμε τον πόντο
-                await db.execute('UPDATE users SET points = points + 1 WHERE id = ?', [cookId]);
+                await db.execute('UPDATE users SET points = points + ? WHERE id = ?', [bonusPoints, cookId]);
             }
         }
         
@@ -324,16 +377,13 @@ app.post('/api/requests', async (req, res) => {
             return res.status(400).json({ message: 'Οι μερίδες έχουν εξαντληθεί!' });
         }
 
-        // 3. Έλεγχος αν έχει ήδη κάνει αίτημα στη συγκεκριμένη αγγελία
-        const [existing] = await db.execute('SELECT * FROM requests WHERE ad_id = ? AND consumer_id = ?', [ad_id, consumer_id]);
-        if (existing.length > 0) {
-             return res.status(400).json({ message: 'Έχετε ήδη ζητήσει μερίδα από αυτή την αγγελία.' });
-        }
-
-        // 4. Καταχώρηση του αιτήματος στη Βάση με status 'pending' (εκκρεμές)
+        // 3. Καταχώρηση του αιτήματος στη Βάση με status 'pending' (εκκρεμές)
         await db.execute('INSERT INTO requests (ad_id, consumer_id, request_status) VALUES (?, ?, "pending")', [ad_id, consumer_id]);
         
-        res.status(201).json({ message: 'Το αίτημα στάλθηκε με επιτυχία στον μάγειρα!' });
+        // 4. ΑΦΑΙΡΕΣΗ ΠΟΝΤΟΥ ΑΠΟ ΤΟΝ ΚΑΤΑΝΑΛΩΤΗ!
+        await db.execute('UPDATE users SET points = points - 1 WHERE id = ?', [consumer_id]);
+        
+        res.status(201).json({ message: 'Το αίτημα στάλθηκε! Σας αφαιρέθηκε 1 πόντος.' });
     } catch (error) {
         console.error('Σφάλμα δημιουργίας αιτήματος:', error);
         res.status(500).json({ message: 'Προέκυψε σφάλμα.' });
@@ -370,23 +420,64 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// ΕΛΕΓΧΟΣ ΚΑΙ ΕΠΙΒΟΛΗ ΠΟΙΝΩΝ (Τρέχει στο παρασκήνιο)
+// ΕΛΕΓΧΟΣ ΚΑΙ ΕΠΙΒΟΛΗ ΠΟΙΝΩΝ ΚΑΙ ΑΝΤΑΜΟΙΒΩΝ (Τρέχει στο παρασκήνιο)
 app.post('/api/check-penalties', async (req, res) => {
     try {
-        // Αφαιρεί 1 πόντο και βάζει review_rating = 0 (ως σημάδι ότι τιμωρήθηκε για να μην ξαναχάσει πόντο)
-        const query = `
-            UPDATE users u
-            JOIN requests r ON u.id = r.consumer_id
-            SET u.points = u.points - 1, r.review_rating = 0 
+        // --- 1. ΕΠΙΣΤΡΟΦΗ ΠΟΝΤΩΝ ΓΙΑ ΑΓΝΟΗΜΕΝΑ ΑΙΤΗΜΑΤΑ ---
+        const pendingQuery = `
+            SELECT id, consumer_id 
+            FROM requests 
+            WHERE request_status = 'pending' 
+            AND created_at <= DATE_SUB(NOW(), INTERVAL 48 HOUR)
+        `;
+        const [ignoredRequests] = await db.execute(pendingQuery);
+
+        for (let request of ignoredRequests) {
+            // Γυρνάμε τον 1 πόντο πίσω στον καταναλωτή
+            await db.execute('UPDATE users SET points = points + 1 WHERE id = ?', [request.consumer_id]);
+            // Αλλάζουμε την κατάσταση σε 'rejected' για να φανεί ακυρωμένο στο ιστορικό του
+            await db.execute('UPDATE requests SET request_status = "rejected" WHERE id = ?', [request.id]);
+        }
+
+        // --- 2. ΠΟΙΝΕΣ ΓΙΑ ΞΕΧΑΣΜΕΝΕΣ ΑΞΙΟΛΟΓΗΣΕΙΣ (Ο παλιός κώδικας) ---
+        const completedQuery = `
+            SELECT r.id as req_id, r.consumer_id, a.cook_id 
+            FROM requests r
+            JOIN ads a ON r.ad_id = a.id
             WHERE r.request_status = 'completed' 
             AND r.review_rating IS NULL 
+            AND (r.review_text IS NULL OR r.review_text != 'SYSTEM_PENALTY')
             AND r.created_at <= DATE_SUB(NOW(), INTERVAL 48 HOUR)
         `;
-        await db.execute(query);
-        res.status(200).json({ message: 'Ο έλεγχος ποινών ολοκληρώθηκε.' });
+        const [expiredRequests] = await db.execute(completedQuery);
+
+        for (let request of expiredRequests) {
+            // Ποινή στον καταναλωτή (-1 πόντος)
+            await db.execute('UPDATE users SET points = points - 1 WHERE id = ?', [request.consumer_id]);
+            // Ανταμοιβή στον μάγειρα (+1 πόντος)
+            await db.execute('UPDATE users SET points = points + 1 WHERE id = ?', [request.cook_id]);
+            // Μαρκάρισμα με "SYSTEM_PENALTY"
+            await db.execute('UPDATE requests SET review_text = "SYSTEM_PENALTY" WHERE id = ?', [request.req_id]);
+        }
+
+        res.status(200).json({ message: 'Ο έλεγχος ποινών και ακυρώσεων ολοκληρώθηκε.' });
     } catch (error) {
-        console.error('Σφάλμα ελέγχου ποινών:', error);
+        console.error('Σφάλμα ελέγχου:', error);
         res.status(500).json({ message: 'Σφάλμα.' });
+    }
+});
+
+// ΠΑΡΑΛΑΒΗ ΤΡΕΧΟΝΤΩΝ ΠΟΝΤΩΝ ΧΡΗΣΤΗ
+app.get('/api/users/:id', async (req, res) => {
+    try {
+        const [users] = await db.execute('SELECT points FROM users WHERE id = ?', [req.params.id]);
+        if (users.length > 0) {
+            res.status(200).json({ points: users[0].points });
+        } else {
+            res.status(404).json({ message: 'Δεν βρέθηκε χρήστης' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: 'Σφάλμα' });
     }
 });
 

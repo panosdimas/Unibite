@@ -20,7 +20,19 @@ document.addEventListener('DOMContentLoaded', () => {
             navLinks.appendChild(adminBtn);
         }
     }
-    document.getElementById('user-info').textContent = `Γεια σου, ${user.username} (Πόντοι: ${user.points})`;
+    // --- ΖΩΝΤΑΝΗ ΑΝΑΝΕΩΣΗ ΠΟΝΤΩΝ ---
+    function updatePointsUI() {
+        fetch(`/api/users/${user.id}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.points !== undefined) {
+                    user.points = data.points;
+                    localStorage.setItem('user', JSON.stringify(user)); 
+                    document.getElementById('user-info').textContent = `Γεια σου, ${user.username} (Πόντοι: ${user.points})`;
+                }
+            }).catch(err => console.error('Σφάλμα ανανέωσης πόντων:', err));
+    }
+    updatePointsUI(); // Το καλούμε με το που ανοίγει η σελίδα!
     document.getElementById('logout-btn').addEventListener('click', () => {
         localStorage.removeItem('user');
         window.location.href = 'index.html';

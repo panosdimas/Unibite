@@ -39,8 +39,28 @@
 
 <div class="container">
     <h2>Διαθέσιμο Φαγητό Σήμερα</h2>
-    <p>Δες τον χάρτη ή τη λίστα παρακάτω και ζήτησε μια μερίδα!</p>
-    
+    <!-- Κοντέινερ για να είναι στην ίδια ευθεία η παράγραφος και το μπλε κουμπί -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <p style="margin: 0;">Δες τον χάρτη ή τη λίστα παρακάτω και ζήτησε μια μερίδα!</p>
+        <span id="toggle-filter-btn" style="color: #007bff; cursor: pointer; text-decoration: underline; font-weight: bold;">Φίλτρο Απόστασης</span>
+    </div>
+
+    <!-- Το Κρυφό Πάνελ Φιλτραρίσματος -->
+    <div id="filter-panel" style="display: none; background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ccc;">
+        <p style="margin-top: 0; font-size: 0.9em; color: #555;"><em>1. Κάνε κλικ στον χάρτη για να ορίσεις την τοποθεσία σου (κόκκινη πινέζα).</em></p>
+        <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+            <div>
+                <label for="filter-distance" style="font-size: 0.9em; font-weight: bold;">Απόσταση (χλμ):</label>
+                <input type="number" id="filter-distance" min="0.1" step="0.1" value="5" style="width: 70px; padding: 5px; border-radius: 4px; border: 1px solid #ccc;">
+            </div>
+            <div>
+                <label for="filter-limit" style="font-size: 0.9em; font-weight: bold;">Όριο Αποτελεσμάτων:</label>
+                <input type="number" id="filter-limit" min="1" value="10" style="width: 70px; padding: 5px; border-radius: 4px; border: 1px solid #ccc;">
+            </div>
+            <button id="apply-filter-btn" style="background-color: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Εφαρμογή</button>
+            <button id="clear-filter-btn" style="background-color: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Καθαρισμός</button>
+        </div>
+    </div>
     <div id="feed-map"></div>
 
     <div id="feed-list"></div>

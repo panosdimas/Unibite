@@ -13,14 +13,21 @@ document.addEventListener('DOMContentLoaded', () => {
         messageDiv.textContent = '';
         messageDiv.className = '';
         
+        const confirmGroup = document.getElementById('confirm-password-group');
+        const confirmInput = document.getElementById('confirm-password');
+
         if (isLoginMode) {
             formTitle.textContent = 'Σύνδεση στο UniBite';
             submitBtn.textContent = 'Είσοδος';
             toggleModeBtn.textContent = 'Δεν έχετε λογαριασμό; Εγγραφείτε εδώ.';
+            confirmGroup.style.display = 'none'; // Κρύβουμε το 2ο password
+            confirmInput.required = false;       // Δεν είναι υποχρεωτικό
         } else {
             formTitle.textContent = 'Εγγραφή στο UniBite';
             submitBtn.textContent = 'Εγγραφή';
             toggleModeBtn.textContent = 'Έχετε ήδη λογαριασμό; Συνδεθείτε εδώ.';
+            confirmGroup.style.display = 'block'; // Εμφανίζουμε το 2ο password
+            confirmInput.required = true;         // Το κάνουμε υποχρεωτικό
         }
     });
 
@@ -30,7 +37,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const username = document.getElementById('username').value;
         const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirm-password').value; // Παίρνουμε τον 2ο κωδικό
 
+        // --- ΕΛΕΓΧΟΣ ΤΑΥΤΙΣΗΣ ΚΩΔΙΚΩΝ (Μόνο στην Εγγραφή) ---
+        if (!isLoginMode && password !== confirmPassword) {
+            messageDiv.textContent = 'Οι κωδικοί δεν ταιριάζουν. Παρακαλώ ελέγξτε τους ξανά.';
+            messageDiv.className = 'error-message';
+            return; // Σταματάμε εδώ, ΔΕΝ στέλνουμε τίποτα στον Server!
+        }
         const endpoint = isLoginMode ? '/api/login' : '/api/register';
 
         try {

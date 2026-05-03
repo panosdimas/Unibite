@@ -21,7 +21,19 @@ document.addEventListener('DOMContentLoaded', () => {
             navLinks.appendChild(adminBtn);
         }
     }
-    document.getElementById('user-info').textContent = `Γεια σου, ${user.username} (Πόντοι: ${user.points})`;
+// --- ΖΩΝΤΑΝΗ ΑΝΑΝΕΩΣΗ ΠΟΝΤΩΝ ---
+    function updatePointsUI() {
+        fetch(`/api/users/${user.id}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.points !== undefined) {
+                    user.points = data.points;
+                    localStorage.setItem('user', JSON.stringify(user)); 
+                    document.getElementById('user-info').textContent = `Γεια σου, ${user.username} (Πόντοι: ${user.points})`;
+                }
+            }).catch(err => console.error('Σφάλμα ανανέωσης πόντων:', err));
+    }
+    updatePointsUI(); // Το καλούμε με το που ανοίγει η σελίδα!
     document.getElementById('logout-btn').addEventListener('click', () => {
         localStorage.removeItem('user');
         window.location.href = 'index.html';
@@ -31,7 +43,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const adMessage = document.getElementById('ad-message');
     const adsList = document.getElementById('my-ads-list');
     const requestsList = document.getElementById('requests-list');
-    let editingAdId = null; 
+    let editingAdId = null;
+    let currentEditImage = null; 
 
     // --- LEAFLET MAP SETUP ---
     let selectedLat = null;
@@ -55,7 +68,16 @@ document.addEventListener('DOMContentLoaded', () => {
             marker = L.marker(e.latlng).addTo(map); // Φτιάχνει νέα πινέζα
         }
     });
-    // -------------------------
+
+    // Βοηθητική συνάρτηση για μετατροπή εικόνας σε Base64
+    function getBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+        });
+    }
 
     // 2. Υποβολή Φόρμας (Δημιουργία Ή Επεξεργασία)
     createAdForm.addEventListener('submit', async (e) => {
@@ -67,6 +89,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // --- ΝΕΟ: Διαβάζουμε το αρχείο της εικόνας ---
+        const imageFile = document.getElementById('image').files[0];
+        let finalImageBase64 = currentEditImage; // Κρατάμε την παλιά εικόνα αν πρόκειται για edit
+
+        if (imageFile) {
+            finalImageBase64 = await getBase64(imageFile); // Μετατροπή της νέας εικόνας
+        }
+
         const adData = {
             cook_id: user.id,
             title: document.getElementById('title').value,
@@ -75,8 +105,9 @@ document.addEventListener('DOMContentLoaded', () => {
             pickup_time: document.getElementById('time').value,
             allergies: document.getElementById('allergies').value,
             notes: document.getElementById('notes').value,
-            g_platos: selectedLat, // Στέλνουμε το πλάτος
-            g_mikos: selectedLng   // Στέλνουμε το μήκος
+            g_platos: selectedLat,
+            g_mikos: selectedLng,
+            image: finalImageBase64 // Στέλνουμε το Base64 string στον server!
         };
 
         const method = editingAdId ? 'PUT' : 'POST';
@@ -96,12 +127,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 adMessage.style.color = 'green';
                 createAdForm.reset();
                 editingAdId = null; 
+                currentEditImage = null; // Καθαρίζουμε την εικόνα
                 document.querySelector('#create-ad-form button[type="submit"]').textContent = 'Δημιουργία Αγγελίας';
                 
-                // Καθαρίζουμε τον χάρτη
                 if (marker) { map.removeLayer(marker); marker = null; }
                 selectedLat = null; selectedLng = null;
-                map.setView([38.246242, 21.735084], 13); // Επαναφορά στην Πάτρα
+                map.setView([38.246242, 21.735084], 13); 
 
                 loadMyAds(); 
             } else {
@@ -142,6 +173,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('time').value = ad.pickup_time;
                 document.getElementById('allergies').value = ad.allergies || '';
                 document.getElementById('notes').value = ad.notes || '';
+                
+                currentEditImage = ad.image; // <--- ΣΗΜΑΝΤΙΚΟ: Θυμόμαστε την παλιά εικόνα!
 
                 // Ενημέρωση χάρτη με τις παλιές συντεταγμένες
                 selectedLat = ad.g_platos;
@@ -238,10 +271,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     statusBadge = '<span style="color: red; font-weight: bold;">Απορρίφθηκε</span>';
                 }
 
+                // --- ΥΠΟΛΟΓΙΣΜΟΣ HTML ΑΞΙΟΛΟΓΗΣΗΣ ---
+                let reviewHTML = '';
+                if (req.request_status === 'completed' && req.review_rating) {
+                    if (req.review_text === 'SYSTEM_PENALTY') {
+                         reviewHTML = `<p style="color: gray; font-size: 0.85em; margin: 5px 0 0 0;"><em>Δεν άφησε αξιολόγηση (+1 πόντος)</em></p>`;
+                    } else {
+                         reviewHTML = `<p style="color: #ffc107; font-size: 0.9em; margin: 5px 0 0 0; background: #333; padding: 2px 5px; border-radius: 4px; display: inline-block;">
+                             <strong>${req.review_rating}/5 ⭐</strong> <span style="color: white; font-weight: normal;">"${req.review_text}"</span>
+                         </p>`;
+                    }
+                }
+                // -------------------------------------
+
                 reqCard.innerHTML = `
                     <div>
                         <p style="margin: 0;">Ο χρήστης <strong>${req.consumer_name}</strong> ζήτησε μερίδα από: <em>${req.ad_title}</em></p>
                         <p style="margin: 5px 0 0 0; font-size: 0.9em;">Κατάσταση: ${statusBadge}</p>
+                        ${reviewHTML} <!-- ΕΔΩ ΕΜΦΑΝΙΖΕΤΑΙ Η ΑΞΙΟΛΟΓΗΣΗ -->
                     </div>
                     <div>${actionButtons}</div>
                 `;
@@ -250,6 +297,8 @@ document.addEventListener('DOMContentLoaded', () => {
             attachRequestEvents();
         } catch (error) { console.error(error); }
     }
+
+
 
     function attachRequestEvents() {
         const approveBtns = document.querySelectorAll('.approve-btn');
@@ -271,7 +320,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ status: newStatus, consumer_id: consumerId })
                     });
-                    if (response.ok) loadRequests();
+                    if (response.ok) {
+                        loadRequests();  // Ανανεώνει τη λίστα αιτημάτων
+                        loadMyAds();     // ΠΡΟΣΘΗΚΗ: Ανανεώνει ΚΑΙ τη λίστα των αγγελιών!
+                    }
                 } catch (error) { console.error(error); }
             });
         });
